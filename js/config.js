@@ -3,7 +3,7 @@
 
 const CONFIG = {
   // Your Supabase project URL (used only to confirm connectivity, not for direct DB access)
-  SUPABASE_URL: 'https://wohislvabmhscsebbtrk.supabase.co',
+  SUPABASE_URL: 'https://hummqochtxvgifcunfks.supabase.co',
 
   // API base — Vercel serverless functions
   API: '/api',
