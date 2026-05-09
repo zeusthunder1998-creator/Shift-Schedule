@@ -11,8 +11,10 @@ export default async function handler(req, res) {
     const { bizId } = req.query;
 
     if (table === 'leave_requests') {
-      const { data, error } = await supabase.from('leave_requests')
+      let q = supabase.from('leave_requests')
         .select('*').eq('business_id', bizId).order('created_at', { ascending: false });
+      if (req.query.since) q = q.gt('created_at', req.query.since);
+      const { data, error } = await q;
       if (error) return res.status(500).json({ error: error.message });
       return res.status(200).json({ data });
     }
@@ -25,9 +27,12 @@ export default async function handler(req, res) {
     }
 
     if (table === 'notifications') {
-      const { data, error } = await supabase.from('notifications')
+      let q = supabase.from('notifications')
         .select('*').eq('business_id', bizId)
-        .order('created_at', { ascending: false }).limit(50);
+        .order('created_at', { ascending: false });
+      if (req.query.since) q = q.gt('created_at', req.query.since);
+      else q = q.limit(50);
+      const { data, error } = await q;
       if (error) return res.status(500).json({ error: error.message });
       return res.status(200).json({ data });
     }

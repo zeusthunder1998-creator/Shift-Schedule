@@ -511,6 +511,28 @@ th { font-size: 0.62rem; font-weight: 700; letter-spacing: 0.08em; color: var(--
 .shift-cell.editable { cursor: pointer; transition: background 0.15s; }
 .shift-cell.editable:hover { background: rgba(91,127,255,0.08) !important; }
 
+
+/* ── Skeleton loading ────────────────────────────────────────── */
+@keyframes shimmerLoad {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg, var(--subtle) 25%, var(--glass) 50%, var(--subtle) 75%);
+  background-size: 200% 100%;
+  animation: shimmerLoad 1.2s infinite;
+  border-radius: 6px;
+  display: inline-block;
+}
+.skeleton-row { height: 40px; margin-bottom: 8px; border-radius: 10px; }
+.skeleton-text { height: 14px; margin-bottom: 6px; }
+
+/* ── Loading overlay improvement ─────────────────────────────── */
+#loadingOverlay {
+  background: var(--bg) !important;
+  opacity: 0.92;
+}
+
 </style>
 </head>
 <body>
@@ -1379,15 +1401,20 @@ function saveSession() {
 }
 
 function logout() {
-  currentUser = null; currentBizId = null;
-  EMPLOYEES = []; MANAGERS = [];
-  if (_pollingInterval) clearInterval(_pollingInterval);
-  localStorage.removeItem('ss_user');
-  document.getElementById('app').style.display = 'none';
-  document.getElementById('loginScreen').style.display = 'flex';
-  if (document.getElementById('thunderDashboard'))
-    document.getElementById('thunderDashboard').remove();
-  showToast('Signed out');
+  showConfirm('🚪 Sign Out', '<p style="font-size:0.85rem;">Are you sure you want to sign out?</p>',
+    function() {
+      currentUser = null; currentBizId = null;
+      EMPLOYEES = []; MANAGERS = [];
+      if (_pollingInterval) clearInterval(_pollingInterval);
+  stopRealtime();
+      localStorage.removeItem('ss_user');
+      document.getElementById('app').style.display = 'none';
+      document.getElementById('loginScreen').style.display = 'flex';
+      if (document.getElementById('thunderDashboard'))
+        document.getElementById('thunderDashboard').remove();
+    },
+    null, 'Sign Out', 'btn danger'
+  );
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1435,6 +1462,7 @@ function initApp() {
 
   startClock();
   startPolling();
+  startRealtime();
   loadThunderAnnouncement();
   updateTopbarAvatar();
   requestNotificationPermission();
@@ -1624,6 +1652,7 @@ function renderSummary() {
 // ═══════════════════════════════════════════════════════════════
 // TABS
 // ═══════════════════════════════════════════════════════════════
+var _lastTabRefresh = {};
 function pgTab(tab) {
   document.querySelectorAll('#managerTabs .pg-tab').forEach(function (b) {
     b.classList.toggle('active', b.id === 'pgt-' + tab);
@@ -1631,9 +1660,19 @@ function pgTab(tab) {
   document.querySelectorAll('#managerTabs .pg-page').forEach(function (p) {
     p.classList.toggle('active', p.id === 'pgp-' + tab);
   });
+  // Always render from cached data immediately
   if (tab === 'status')   { renderWorkHours(); renderAttendanceGrid(); }
   if (tab === 'requests') { renderLeaveRequests(); renderResetRequests(); renderAlertList(); }
   if (tab === 'settings') { renderMemberList(); }
+
+  // Only re-fetch if >30s since last fetch for this tab
+  var now = Date.now();
+  var stale = !_lastTabRefresh[tab] || (now - _lastTabRefresh[tab]) > 30000;
+  if (stale) {
+    _lastTabRefresh[tab] = now;
+    if (tab === 'status')   { refreshAttendance(); }
+    if (tab === 'requests') { refreshLeaveRequests(); refreshResetRequests(); refreshNotifications(); }
+  }
 }
 
 function pgStaffTab(tab) {
@@ -1931,7 +1970,11 @@ async function submitAddMember() {
     });
     closeAddMember();
     showToast(name + ' added successfully');
-    await loadAppData();
+    // Refresh members only
+    var res2 = await get('/businesses', { bizId: currentBizId });
+    var biz2 = (res2.businesses || []).find(function(b) { return b.id === currentBizId; });
+    if (biz2) populateMembers(biz2.members || []);
+    renderMemberList();
   } catch(e) { errEl.textContent = '❌ ' + e.message; }
 }
 
@@ -1973,7 +2016,10 @@ async function submitEditMember() {
     await put('/businesses?action=update_member', { memberId: mid, shift, expectedHours: hrs, password: pw || undefined });
     closeEditMember();
     showToast('Member updated');
-    await loadAppData();
+    var res3 = await get('/businesses', { bizId: currentBizId });
+    var biz3 = (res3.businesses || []).find(function(b) { return b.id === currentBizId; });
+    if (biz3) populateMembers(biz3.members || []);
+    renderMemberList();
   } catch(e) { showToast('❌ ' + e.message); }
 }
 
@@ -1982,7 +2028,10 @@ async function removeMember(id, name) {
   try {
     await del('/businesses?action=remove_member', { memberId: id });
     showToast(name + ' removed');
-    await loadAppData();
+    var res4 = await get('/businesses', { bizId: currentBizId });
+    var biz4 = (res4.businesses || []).find(function(b) { return b.id === currentBizId; });
+    if (biz4) populateMembers(biz4.members || []);
+    renderMemberList();
   } catch(e) { showToast('❌ ' + e.message); }
 }
 
@@ -2010,7 +2059,7 @@ async function submitLeaveRequest() {
     });
     closeLeaveRequest();
     showToast('Leave request submitted');
-    await loadAppData();
+    await refreshLeaveRequests();
   } catch(e) { document.getElementById('leaveError').textContent = '❌ ' + e.message; }
 }
 
@@ -2037,25 +2086,30 @@ function renderLeaveRequests() {
 
 async function handleLeave(id, status) {
   try {
-    await put('/data?table=leave_requests', { id, status });
-    // Find the request to notify the person
+    // Optimistic update — change locally first
     var req = leaveRequests.find(function(r) { return r.id === id; });
+    if (req) req.status = status;
+    renderLeaveRequests();
+
+    await put('/data?table=leave_requests', { id, status });
+
     if (req) {
       var msg = status === 'approved'
         ? 'Your leave request for ' + (req.date||'') + ' has been approved'
         : 'Your leave request for ' + (req.date||'') + ' was not approved';
-      // Post notification to the member
       await post('/data?action=notification', {
-        bizId:     currentBizId,
-        recipient: req.member_name,
-        sentBy:    currentUser.name,
-        message:   msg,
-        type:      status === 'approved' ? 'success' : 'info'
+        bizId: currentBizId, recipient: req.member_name,
+        sentBy: currentUser.name, message: msg,
+        type: status === 'approved' ? 'success' : 'info'
       });
     }
     showToast(status === 'approved' ? '✅ Approved' : '❌ Rejected');
-    await loadAppData();
-  } catch(e) { showToast('❌ ' + e.message); }
+    // Refresh only leave requests in background
+    refreshLeaveRequests();
+  } catch(e) {
+    showToast('❌ ' + e.message);
+    await refreshLeaveRequests(); // revert on error
+  }
 }
 
 function renderMyLeave() {
@@ -2117,9 +2171,14 @@ async function setNewPassword(reqId, memberName) {
 
 async function handleReset(id, status) {
   try {
+    var req = resetRequests.find(function(r) { return r.id === id; });
+    if (req) req.status = status;
+    renderResetRequests();
     await put('/data?table=reset_requests', { id, status });
-    await loadAppData();
-  } catch(e) { showToast('❌ ' + e.message); }
+  } catch(e) {
+    showToast('❌ ' + e.message);
+    await refreshResetRequests();
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -2138,7 +2197,7 @@ async function submitAlert() {
     });
     closeAlertModal();
     showToast('Announcement posted');
-    await loadAppData();
+    await refreshNotifications();
   } catch(e) { showToast('❌ ' + e.message); }
 }
 
@@ -2216,7 +2275,8 @@ async function doPunch() {
   try {
     await post('/attendance', { bizId: currentBizId, memberId: currentUser.id, action });
     showToast(action === 'clock_in' ? '🟢 Clocked in' : '🔴 Clocked out');
-    await loadAppData();
+    await refreshAttendance();
+    updatePunchUI();
   } catch(e) { showToast('❌ ' + e.message); }
 }
 
@@ -2332,7 +2392,7 @@ async function submitShiftSwap() {
     });
     closeShiftSwap();
     showToast('Shift change requested');
-    await loadAppData();
+    await refreshSwaps();
   } catch(e) { showToast('❌ ' + e.message); }
 }
 
@@ -2370,9 +2430,14 @@ function renderShiftSwapList() {
 
 async function handleSwap(id, status) {
   try {
+    var sw = shiftSwaps.find(function(s) { return s.id === id; });
+    if (sw) sw.status = status;
+    renderShiftSwapList();
     await put('/data?table=shift_swaps', { id, status });
-    await loadAppData();
-  } catch(e) { showToast('❌ ' + e.message); }
+  } catch(e) {
+    showToast('❌ ' + e.message);
+    await refreshSwaps();
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -2621,6 +2686,7 @@ function startClock() {
 
 function startPolling() {
   if (_pollingInterval) clearInterval(_pollingInterval);
+  stopRealtime();
   _pollingInterval = setInterval(async function () {
     if (!currentBizId || !currentUser) return;
     try {
@@ -3266,6 +3332,139 @@ if ('serviceWorker' in navigator) {
   });
 }
 
+
+// ═══════════════════════════════════════════════════════════════
+// TARGETED REFRESH FUNCTIONS (fast, no loading overlay)
+// ═══════════════════════════════════════════════════════════════
+async function refreshLeaveRequests() {
+  if (!currentBizId) return;
+  try {
+    var r = await get('/data', { table: 'leave_requests', bizId: currentBizId });
+    leaveRequests = r.data || [];
+    renderLeaveRequests();
+    renderMyLeave();
+  } catch(e) {}
+}
+
+async function refreshResetRequests() {
+  if (!currentBizId) return;
+  try {
+    var r = await get('/data', { table: 'reset_requests', bizId: currentBizId });
+    resetRequests = r.data || [];
+    renderResetRequests();
+  } catch(e) {}
+}
+
+async function refreshNotifications() {
+  if (!currentBizId) return;
+  try {
+    var r = await get('/data', { table: 'notifications', bizId: currentBizId });
+    notifications = r.data || [];
+    renderAlertList();
+    renderMyAlerts();
+    updateNotifBadge();
+  } catch(e) {}
+}
+
+async function refreshAttendance() {
+  if (!currentBizId) return;
+  try {
+    var r = await get('/attendance', { bizId: currentBizId });
+    attendanceRecords = r.records || [];
+    renderAttendanceGrid();
+    renderMyAttendance();
+    renderWorkHours();
+  } catch(e) {}
+}
+
+async function refreshSwaps() {
+  if (!currentBizId) return;
+  try {
+    var r = await get('/data', { table: 'shift_swaps', bizId: currentBizId });
+    shiftSwaps = r.data || [];
+    renderShiftSwapList();
+    renderMySwaps();
+  } catch(e) {}
+}
+
+async function refreshSchedule() {
+  if (!currentBizId) return;
+  try {
+    var weekStart = getWeekStart(currentWeekOffset);
+    var r = await get('/schedule', { bizId: currentBizId, weekStart: weekStart });
+    scheduleData = r.schedule || [];
+    renderTable();
+    renderSummary();
+  } catch(e) {}
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SUPABASE REALTIME — instant sync via long-polling
+// Polls every 5s but only fetches changed data using timestamps
+// ═══════════════════════════════════════════════════════════════
+var _lastSync = null;
+var _realtimeInterval = null;
+
+function startRealtime() {
+  if (_realtimeInterval) clearInterval(_realtimeInterval);
+  _lastSync = new Date().toISOString();
+
+  _realtimeInterval = setInterval(async function() {
+    if (!currentBizId || !currentUser) return;
+    try {
+      // Check for new notifications since last sync
+      var notifRes = await get('/data', {
+        table: 'notifications',
+        bizId: currentBizId,
+        since: _lastSync
+      });
+
+      var newNotifs = notifRes.data || [];
+      if (newNotifs.length > 0) {
+        // Prepend new notifications
+        notifications = newNotifs.concat(notifications.filter(function(n) {
+          return !newNotifs.find(function(nn) { return nn.id === n.id; });
+        }));
+        // Check if any are for current user
+        var mine = newNotifs.filter(function(n) {
+          return n.recipient === 'all' || n.recipient === currentUser.username;
+        });
+        if (mine.length > 0) {
+          sendLocalNotification('New message', mine[0].message);
+          updateNotifBadge();
+          if (!isManager()) renderMyAlerts();
+          else renderAlertList();
+        }
+      }
+
+      // Check for new leave requests (managers only)
+      if (isManager()) {
+        var lrRes = await get('/data', {
+          table: 'leave_requests',
+          bizId: currentBizId,
+          since: _lastSync
+        });
+        var newLR = lrRes.data || [];
+        if (newLR.length > 0) {
+          leaveRequests = newLR.concat(leaveRequests.filter(function(r) {
+            return !newLR.find(function(nr) { return nr.id === r.id; });
+          }));
+          renderLeaveRequests();
+          // Badge update
+          var pending = leaveRequests.filter(function(r) { return r.status === 'pending'; }).length;
+          var badge = document.getElementById('pgtb-requests');
+          if (badge) { badge.textContent = pending || ''; badge.style.display = pending ? 'flex' : 'none'; }
+        }
+      }
+
+      _lastSync = new Date().toISOString();
+    } catch(e) {}
+  }, 5000); // every 5 seconds — fast real-time feel
+}
+
+function stopRealtime() {
+  if (_realtimeInterval) { clearInterval(_realtimeInterval); _realtimeInterval = null; }
+}
 </script>
 
 <!-- ═══ CREATE BUSINESS MODAL ═══ -->
