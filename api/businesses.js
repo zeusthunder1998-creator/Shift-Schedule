@@ -66,7 +66,7 @@ export default async function handler(req, res) {
         business_id: bizId,
         name: name.trim(),
         username: username.trim().toLowerCase(),
-        role, is_admin: role === 'manager' || role === 'subadmin',
+        role, is_admin: role === 'subadmin',
         shift: shift || 'Varies',
         expected_hours: expectedHours || 48,
         ...palette

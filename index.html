@@ -51,7 +51,7 @@ label { font-size: 0.75rem; font-weight: 600; color: var(--muted); display: bloc
   position: fixed; inset: 0; z-index: 9999;
   background: #0a0a0f;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px;
-  animation: splashFade 0.6s ease 3.8s forwards;
+  animation: splashFade 0.5s ease 3.0s forwards;
   overflow: hidden;
 }
 @keyframes splashFade { to { opacity: 0; pointer-events: none; visibility: hidden; } }
@@ -94,7 +94,7 @@ label { font-size: 0.75rem; font-weight: 600; color: var(--muted); display: bloc
   height: 100%; border-radius: 4px;
   background: linear-gradient(90deg, #5b7fff, #38d9c0, #5b7fff);
   background-size: 200% 100%;
-  animation: splashBarLoad 3s ease 0.9s forwards, shimmer 1.5s linear 0.9s infinite;
+  animation: splashBarLoad 2.2s ease 0.6s both, shimmer 1.5s linear 0.9s infinite;
   width: 0;
 }
 @keyframes splashBarLoad { to { width: 100%; } }
@@ -217,8 +217,9 @@ label { font-size: 0.75rem; font-weight: 600; color: var(--muted); display: bloc
   min-width: 13px; height: 13px; border-radius: 7px; padding: 0 3px;
   display: none; align-items: center; justify-content: center;
 }
-.pg-page { display: none; }
-.pg-page.active { display: block; }
+.pg-page { display: none; opacity: 0; }
+.pg-page.active { display: block; animation: fadeIn 0.15s ease forwards; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 [data-theme="light"] .pg-tabs { background: #f0f2f7; border-color: rgba(0,0,0,0.08); }
 [data-theme="light"] .pg-tab { color: #888; }
 [data-theme="light"] .pg-tab.active { color: #fff; }
@@ -240,9 +241,13 @@ label { font-size: 0.75rem; font-weight: 600; color: var(--muted); display: bloc
 .btn {
   background: var(--glass); border: 1px solid var(--glass-border);
   color: var(--text); border-radius: 8px; padding: 7px 14px;
-  font-size: 0.78rem; font-weight: 600; cursor: pointer; transition: all 0.2s;
+  font-size: 0.78rem; font-weight: 600; cursor: pointer;
+  transition: opacity 0.15s, transform 0.1s;
   display: inline-flex; align-items: center; gap: 5px;
+  -webkit-user-select: none; user-select: none;
 }
+.btn:active { transform: scale(0.96); opacity: 0.85; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 .btn.primary { background: linear-gradient(135deg, var(--primary), var(--primary2)); border: none; color: #fff; }
 .btn.danger  { background: rgba(255,108,108,0.1); border-color: rgba(255,108,108,0.3); color: #ff6c6c; }
 .btn.success { background: rgba(77,255,210,0.1); border-color: rgba(77,255,210,0.3); color: #38d9c0; }
@@ -413,10 +418,17 @@ th { font-size: 0.62rem; font-weight: 700; letter-spacing: 0.08em; color: var(--
 
 /* ── Modals ──────────────────────────────────────────────────── */
 .modal-overlay {
-  position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+  position: fixed; inset: 0; background: rgba(0,0,0,0);
   z-index: 1000; display: none; align-items: center; justify-content: center; padding: 20px;
+  transition: background 0.2s;
 }
-.modal-overlay.open { display: flex; }
+.modal-overlay.open { display: flex; background: rgba(0,0,0,0.6); }
+.modal-overlay .modal {
+  transform: translateY(16px) scale(0.97);
+  opacity: 0;
+  transition: transform 0.2s cubic-bezier(0.34,1.3,0.64,1), opacity 0.15s;
+}
+.modal-overlay.open .modal { transform: translateY(0) scale(1); opacity: 1; }
 .info-modal { align-items: flex-start; overflow-y: auto; background: rgba(0,0,0,0.85); }
 .modal {
   background: var(--surface); border: 1px solid var(--glass-border);
@@ -442,12 +454,14 @@ th { font-size: 0.62rem; font-weight: 700; letter-spacing: 0.08em; color: var(--
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 .toast {
-  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px);
+  position: fixed; bottom: 24px; left: 50%;
+  transform: translateX(-50%) translateY(100px);
   background: var(--surface); border: 1px solid var(--glass-border);
-  color: var(--text); border-radius: 10px; padding: 10px 20px;
+  color: var(--text); border-radius: 12px; padding: 11px 22px;
   font-size: 0.82rem; font-weight: 600; z-index: 9999;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.3);
-  transition: transform 0.3s, opacity 0.3s; opacity: 0;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.35);
+  transition: transform 0.25s cubic-bezier(0.34,1.3,0.64,1), opacity 0.2s;
+  opacity: 0; white-space: nowrap; max-width: 90vw;
 }
 .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
 #alertBanner:not(:empty) {
@@ -532,6 +546,29 @@ th { font-size: 0.62rem; font-weight: 700; letter-spacing: 0.08em; color: var(--
   background: var(--bg) !important;
   opacity: 0.92;
 }
+
+
+/* ── Performance ──────────────────────────────────────────── */
+* { -webkit-tap-highlight-color: transparent; }
+.pg-page { will-change: auto; }
+.schedule-wrapper { will-change: scroll-position; }
+.modal-overlay { will-change: opacity; }
+.modal { will-change: transform; }
+.shift-block { will-change: background; }
+.btn { will-change: opacity; }
+/* Smooth scrolling */
+html { scroll-behavior: smooth; }
+/* Faster transitions */
+.pg-tab { transition: background 0.12s, color 0.12s; }
+.btn { transition: opacity 0.15s, transform 0.1s; }
+.btn:active { transform: scale(0.97); }
+.shift-pick-btn:active { transform: scale(0.95); }
+/* Remove slow backdrop blur on low-end devices */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+/* GPU acceleration for modals */
+.modal-overlay.open .modal { transform: translateZ(0); }
 
 </style>
 </head>
@@ -628,7 +665,8 @@ th { font-size: 0.62rem; font-weight: 700; letter-spacing: 0.08em; color: var(--
 <div id="app" style="display:none;">
   <!-- Loading overlay -->
   <div id="loadingOverlay" style="display:none;position:fixed;inset:0;z-index:9000;
-    background:var(--bg);display:flex;align-items:center;justify-content:center;">
+    background:var(--bg);align-items:center;justify-content:center;
+    transition:opacity 0.15s;">
     <div style="text-align:center;">
       <div class="spinner"></div>
       <div style="font-size:0.8rem;color:var(--muted);margin-top:12px;">Loading...</div>
@@ -769,9 +807,9 @@ th { font-size: 0.62rem; font-weight: 700; letter-spacing: 0.08em; color: var(--
         <div class="panel-title">👥 Manage Members
   
         </div>
-        <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+        <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;" id="addStaffBtnWrap">
           <button onclick="openAddStaff()" class="btn primary sm">➕ Add Staff</button>
-          <button onclick="openAddManager()" id="addManagerBtn" class="btn sm" style="display:none;">➕ Add Manager</button>
+          <button onclick="openAddManager()" id="addManagerBtn" class="btn sm">➕ Add Manager</button>
         </div>
         <div id="memberList"><p class="empty-msg">Loading members...</p></div>
       </div>
@@ -1005,10 +1043,11 @@ th { font-size: 0.62rem; font-weight: 700; letter-spacing: 0.08em; color: var(--
     <div id="newMemberShiftWrap" class="login-field">
       <label>Default Shift</label>
       <select id="newMemberShift">
-        <option>First Shift</option>
-        <option>Second Shift</option>
-        <option>Third Shift</option>
-        <option>Varies</option>
+        <option value="No Shift">No Shift (Manager/Admin)</option>
+        <option value="First Shift">First Shift</option>
+        <option value="Second Shift">Second Shift</option>
+        <option value="Third Shift">Third Shift</option>
+        <option value="Varies">Varies</option>
       </select>
     </div>
     <div id="newMemberHrsWrap" class="login-field">
@@ -1031,10 +1070,11 @@ th { font-size: 0.62rem; font-weight: 700; letter-spacing: 0.08em; color: var(--
     <div class="login-field">
       <label>Default Shift</label>
       <select id="editMemberShift">
-        <option>First Shift</option>
-        <option>Second Shift</option>
-        <option>Third Shift</option>
-        <option>Varies</option>
+        <option value="No Shift">No Shift (Manager/Admin)</option>
+        <option value="First Shift">First Shift</option>
+        <option value="Second Shift">Second Shift</option>
+        <option value="Third Shift">Third Shift</option>
+        <option value="Varies">Varies</option>
       </select>
     </div>
     <div class="login-field">
@@ -1167,7 +1207,7 @@ th { font-size: 0.62rem; font-weight: 700; letter-spacing: 0.08em; color: var(--
 
 const CONFIG = {
   // Your Supabase project URL (used only to confirm connectivity, not for direct DB access)
-  SUPABASE_URL: 'https://wohislvabmhscsebbtrk.supabase.co',
+  SUPABASE_URL: 'https://hummqochtxvgifcunfks.supabase.co',
 
   // API base — Vercel serverless functions
   API: '/api',
@@ -1192,7 +1232,6 @@ const CONFIG = {
 // ═══════════════════════════════════════════════════════════════
 let currentUser    = null;
 let currentBizId   = null;
-let currentBizCode = '';
 let currentBizName = '';
 let EMPLOYEES      = [];
 let MANAGERS       = [];
@@ -1213,6 +1252,7 @@ const SHIFT_COLORS = {
   'Second Shift': { color: '#ff6c6c', bg: 'rgba(255,108,108,0.10)' },
   'Third Shift':  { color: '#40e080', bg: 'rgba(64,224,128,0.14)'  },
   'Varies':       { color: '#ffb84d', bg: 'rgba(255,184,77,0.10)'  },
+  'No Shift':     { color: '#7878a0', bg: 'rgba(120,120,160,0.08)' },
 };
 
 const EMP_COLORS = [
@@ -1227,7 +1267,22 @@ const EMP_COLORS = [
 // ═══════════════════════════════════════════════════════════════
 // API HELPERS
 // ═══════════════════════════════════════════════════════════════
+// Simple in-memory cache for GET requests
+var _apiCache = {};
+var _apiCacheTTL = 8000; // 8 seconds
+
 async function api(path, opts = {}) {
+  var isGet = !opts.method || opts.method === 'GET';
+  var cacheKey = path;
+
+  // Return cached data immediately for GET requests
+  if (isGet && _apiCache[cacheKey]) {
+    var cached = _apiCache[cacheKey];
+    if (Date.now() - cached.ts < _apiCacheTTL) {
+      return cached.data;
+    }
+  }
+
   try {
     const res = await fetch(CONFIG.API + path, {
       headers: { 'Content-Type': 'application/json', ...opts.headers },
@@ -1236,6 +1291,14 @@ async function api(path, opts = {}) {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Request failed');
+
+    // Cache successful GET responses
+    if (isGet) {
+      _apiCache[cacheKey] = { data: data, ts: Date.now() };
+    } else {
+      // Invalidate related caches on mutations
+      _apiCache = {};
+    }
     return data;
   } catch (err) {
     if (err.message === 'Failed to fetch') {
@@ -1272,7 +1335,7 @@ window.addEventListener('DOMContentLoaded', function () {
     document.getElementById('splash').style.display = 'none';
     document.getElementById('loginScreen').style.display = 'flex';
     restoreSession();
-  }, 4200);
+  }, 2800);
 });
 
 function restoreSession() {
@@ -1284,7 +1347,6 @@ function restoreSession() {
 
     currentUser    = user;
     currentBizId   = user.bizId   || null;
-    currentBizCode = user.bizCode || '';
     currentBizName = user.bizName || '';
 
     if (user.role === 'superadmin') {
@@ -1330,11 +1392,10 @@ async function doLogin(e) {
 
   try {
     const hashedPw = await hashPassword(password);
-    const data = await post('/auth', { bizCode: bizCode || null, username, password, hashedPw });
+    const data = await post('/auth', { username, password, hashedPw });
 
     currentUser    = data.user;
     currentBizId   = data.user.bizId;
-    currentBizCode = data.user.bizCode || '';
     currentBizName = data.user.bizName || '';
 
     if (data.members) populateMembers(data.members);
@@ -1342,7 +1403,6 @@ async function doLogin(e) {
     saveSession();
     document.getElementById('passwordInput').value = '';
     document.getElementById('usernameInput').value = '';
-    document.getElementById('bizCodeInput').value  = '';
 
     showApp();
 
@@ -1395,7 +1455,7 @@ function populateMembers(members) {
 function saveSession() {
   try {
     localStorage.setItem('ss_user', JSON.stringify({
-      ...currentUser, bizId: currentBizId, bizCode: currentBizCode, bizName: currentBizName
+      ...currentUser, bizId: currentBizId, bizName: currentBizName
     }));
   } catch(e) {}
 }
@@ -1507,23 +1567,28 @@ async function loadAppData() {
 
     hideLoadingOverlay();
     initApp();
+    // Render only the active (visible) tab first for instant display
     renderTable();
     renderSummary();
-    renderLeaveRequests();
-    renderResetRequests();
-    renderAlertList();
-    renderMemberList();
     updatePunchUI();
     updateNotifBadge();
-    if (isManager()) {
-      renderWorkHours();
-      renderAttendanceGrid();
-    } else {
-      renderMyAlerts();
-      renderMyLeave();
-      renderMyAttendance();
-      renderMySwaps();
-    }
+    // Defer non-visible tab renders using requestIdleCallback
+    var deferRender = window.requestIdleCallback || function(cb) { setTimeout(cb, 50); };
+    deferRender(function() {
+      renderLeaveRequests();
+      renderResetRequests();
+      renderAlertList();
+      renderMemberList();
+      if (isManager()) {
+        renderWorkHours();
+        renderAttendanceGrid();
+      } else {
+        renderMyAlerts();
+        renderMyLeave();
+        renderMyAttendance();
+        renderMySwaps();
+      }
+    });
   } catch (err) {
     hideLoadingOverlay();
     showToast('❌ Load error: ' + err.message);
@@ -1555,15 +1620,16 @@ function getWeekDates(offset) {
 
 function changeWeek(dir) {
   currentWeekOffset += dir;
+  scheduleData = []; // clear immediately so table shows empty while loading
   renderTable();
   renderSummary();
   // Fetch new week data
-  const weekStart = getWeekStart(currentWeekOffset);
-  get('/schedule', { bizId: currentBizId, weekStart }).then(function (d) {
+  var weekStart = getWeekStart(currentWeekOffset);
+  get('/schedule', { bizId: currentBizId, weekStart: weekStart }).then(function (d) {
     scheduleData = d.schedule || [];
     renderTable();
     renderSummary();
-  });
+  }).catch(function() {});
 }
 
 function goToToday() { currentWeekOffset = 0; renderTable(); renderSummary(); }
@@ -1774,7 +1840,7 @@ async function renderThunderDashboard(container) {
     html += '<div class="biz-card" data-bizid="' + biz.id + '">' +
       '<div class="biz-card-header">' +
       '<div><div class="biz-name">' + biz.name + '</div>' +
-      '<div class="biz-code">Code: <strong>' + biz.code + '</strong></div></div>' +
+      '</div>' +
       '<div style="display:flex;gap:8px;">' +
       '<button class="btn sm biz-edit-btn" data-bizid="' + biz.id + '">✏️ Edit</button>' +
       '<button class="btn danger sm biz-del-btn" data-bizid="' + biz.id + '" data-bizname="' + biz.name + '">🗑 Delete</button>' +
@@ -1947,9 +2013,17 @@ function openAddManager() { _addMemberRole = 'manager'; openAddMember(); }
 function openAddMember() {
   document.getElementById('addMemberTitle').textContent = _addMemberRole === 'manager' ? '➕ Add Manager' : '➕ Add Staff Member';
   ['addMemberError','newMemberName','newMemberUsername','newMemberPw'].forEach(function (id) {
-    const el = document.getElementById(id);
+    var el = document.getElementById(id);
     if (el) el.value = '';
   });
+  // Auto-select No Shift for managers, First Shift for staff
+  var shiftSel = document.getElementById('newMemberShift');
+  if (shiftSel) shiftSel.value = _addMemberRole === 'manager' ? 'No Shift' : 'First Shift';
+  // Hide shift/hours for managers
+  var shiftWrap = document.getElementById('newMemberShiftWrap');
+  var hrsWrap   = document.getElementById('newMemberHrsWrap');
+  if (shiftWrap) shiftWrap.style.display = _addMemberRole === 'manager' ? 'none' : 'block';
+  if (hrsWrap)   hrsWrap.style.display   = _addMemberRole === 'manager' ? 'none' : 'block';
   document.getElementById('addMemberOverlay').classList.add('open');
 }
 function closeAddMember() { document.getElementById('addMemberOverlay').classList.remove('open'); }
@@ -1962,7 +2036,6 @@ async function submitAddMember() {
   const hrs     = parseInt(document.getElementById('newMemberHrs').value) || 48;
   const errEl   = document.getElementById('addMemberError');
   if (!name || !uname || !pw) { errEl.textContent = 'Name, username and password required'; return; }
-  if (!note) { errEl.textContent = 'Please add a note explaining why you need an account'; return; }
   try {
     await post('/businesses?action=add_member', {
       bizId: currentBizId, name, username: uname.toLowerCase(),
@@ -2521,7 +2594,7 @@ async function submitChangePassword() {
   try {
     // Verify current by re-logging in
     await post('/auth', {
-      bizCode: currentBizCode, username: currentUser.username, password: current
+      username: currentUser.username, password: current
     });
     var newHashed = await hashPassword(newPw);
     await put('/businesses?action=update_member', {
@@ -2589,7 +2662,6 @@ async function submitRegister() {
     'Full Name:  ' + name,
     'Username:   ' + uname,
     'Password:   ' + pw,
-    bizCode ? 'Business Code: ' + bizCode : '',
     note    ? 'Note: ' + note : '',
     '',
     '-- Shift Schedule App',
@@ -2777,24 +2849,67 @@ function applyTheme(t) {
 // ═══════════════════════════════════════════════════════════════
 // THUNDER ANNOUNCEMENT
 // ═══════════════════════════════════════════════════════════════
-function openThunderAnnouncement() {
-  var el = document.getElementById('thunderAnnMessage');
-  if (el) el.value = '';
-  var err = document.getElementById('thunderAnnError');
-  if (err) err.textContent = '';
+async function openThunderAnnouncement() {
+  var msgEl = document.getElementById('thunderAnnMessage');
+  var errEl = document.getElementById('thunderAnnError');
+  if (msgEl) msgEl.value = '';
+  if (errEl) errEl.textContent = '';
+
+  // Populate recipient dropdown with all sub admins
+  var sel = document.getElementById('thunderAnnRecipient');
+  if (sel) {
+    sel.innerHTML = '<option value="all">📢 All Sub Admins</option>';
+    try {
+      var res = await get('/businesses');
+      (res.businesses || []).forEach(function(biz) {
+        var sa = (biz.members || []).find(function(m) { return m.role === 'subadmin'; });
+        if (sa) {
+          var opt = document.createElement('option');
+          opt.value = sa.username;
+          opt.textContent = '👤 ' + sa.name + ' (' + biz.name + ')';
+          sel.appendChild(opt);
+        }
+      });
+    } catch(e) {}
+  }
+
   document.getElementById('thunderAnnOverlay').classList.add('open');
 }
 function closeThunderAnnouncement() {
   document.getElementById('thunderAnnOverlay').classList.remove('open');
 }
 async function submitThunderAnnouncement() {
-  var msg = document.getElementById('thunderAnnMessage').value.trim();
-  var err = document.getElementById('thunderAnnError');
+  var msg       = document.getElementById('thunderAnnMessage').value.trim();
+  var recipient = document.getElementById('thunderAnnRecipient').value;
+  var err       = document.getElementById('thunderAnnError');
   if (!msg) { err.textContent = 'Please enter a message'; return; }
   try {
-    await post('/data?action=save_setting', { key: 'thunder_announcement', value: msg });
+    if (recipient === 'all') {
+      // Save as global announcement shown on all dashboards
+      await post('/data?action=save_setting', { key: 'thunder_announcement', value: msg });
+      showToast('📣 Announcement sent to all Sub Admins');
+    } else {
+      // Send as a notification to specific sub admin username
+      // Find their business to get bizId
+      var res = await get('/businesses');
+      var targetBiz = null;
+      var targetMember = null;
+      (res.businesses || []).forEach(function(biz) {
+        var sa = (biz.members || []).find(function(m) { return m.username === recipient; });
+        if (sa) { targetBiz = biz; targetMember = sa; }
+      });
+      if (targetBiz && targetMember) {
+        await post('/data?action=notification', {
+          bizId:     targetBiz.id,
+          recipient: recipient,
+          sentBy:    'Thunder',
+          message:   '⚡ ' + msg,
+          type:      'thunder'
+        });
+        showToast('📣 Sent to ' + targetMember.name);
+      }
+    }
     closeThunderAnnouncement();
-    showToast('📣 Announcement sent to all Sub Admins');
   } catch(e) { err.textContent = '❌ ' + e.message; }
 }
 
@@ -3545,9 +3660,16 @@ function stopRealtime() {
 <div id="thunderAnnOverlay" class="modal-overlay" onclick="if(event.target===this)closeThunderAnnouncement()">
   <div class="modal">
     <div class="modal-title">📣 Send Announcement</div>
-    <div style="font-size:0.72rem;color:var(--muted);margin-bottom:14px;">
-      This announcement will appear at the top of every Sub Admin's dashboard.
+
+    <div class="login-field">
+      <label>Send to</label>
+      <select id="thunderAnnRecipient"
+        style="width:100%;padding:10px 12px;border-radius:9px;border:1px solid var(--glass-border);
+               background:var(--surface);color:var(--text);font-size:0.85rem;outline:none;">
+        <option value="all">📢 All Sub Admins</option>
+      </select>
     </div>
+
     <div class="login-field">
       <label>Message *</label>
       <textarea id="thunderAnnMessage" placeholder="Type your announcement..." rows="3"
@@ -3557,7 +3679,7 @@ function stopRealtime() {
     <p class="login-error" id="thunderAnnError"></p>
     <div class="modal-actions">
       <button class="btn" onclick="closeThunderAnnouncement()">Cancel</button>
-      <button class="btn primary" onclick="submitThunderAnnouncement()">📣 Send to All</button>
+      <button class="btn primary" onclick="submitThunderAnnouncement()">📣 Send</button>
     </div>
   </div>
 </div>
